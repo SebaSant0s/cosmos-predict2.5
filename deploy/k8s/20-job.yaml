@@ -1,0 +1,67 @@
+# One-shot Cosmos-Predict2.5 inference run.
+#
+# Prereqs (see deploy/README.md):
+#   - image built on the node as  localhost/cosmos-predict2.5:local
+#   - secret 'hf-token' created:   kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_xxx
+#   - PVC 'cosmos-data' applied:   kubectl apply -f deploy/k8s/10-pvc.yaml
+#
+# Run:
+#   kubectl apply -f deploy/k8s/20-job.yaml
+#   kubectl logs -f job/cosmos-infer
+#
+# Re-run after changing something:
+#   kubectl delete job cosmos-infer ; kubectl apply -f deploy/k8s/20-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cosmos-infer
+spec:
+  backoffLimit: 0
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: cosmos-infer
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: cosmos
+          image: localhost/cosmos-predict2.5:local
+          imagePullPolicy: IfNotPresent
+          workingDir: /workspace
+          # 'args' (not 'command') keeps the image entrypoint, which runs `uv sync`.
+          args: ["bash", "deploy/run_infer.sh"]
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            - name: HF_HOME
+              value: /data/hf
+            - name: OUTPUT_DIR
+              value: /data/outputs
+            - name: INPUT
+              value: assets/base/shovel_example.json
+            - name: MODEL
+              value: 2B/post-trained
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              cpu: "4"
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: cosmos-data
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi

@@ -1,0 +1,17 @@
+# Quick sanity check: does a pod get a GPU, and which one?
+#   kubectl apply -f deploy/k8s/00-gpu-check.yaml
+#   kubectl logs -f gpu-check
+#   kubectl delete -f deploy/k8s/00-gpu-check.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-check
+spec:
+  restartPolicy: Never
+  containers:
+    - name: gpu-check
+      image: docker.io/nvidia/cuda:12.8.1-base-ubuntu24.04
+      command: ["nvidia-smi"]
+      resources:
+        limits:
+          nvidia.com/gpu: 1

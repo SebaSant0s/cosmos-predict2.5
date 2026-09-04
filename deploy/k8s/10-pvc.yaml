@@ -1,0 +1,13 @@
+# Persistent storage for Hugging Face checkpoints (large!) and generated outputs.
+# Backed by the node's local disk via the local-path storageclass.
+#   kubectl apply -f deploy/k8s/10-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cosmos-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 200Gi
