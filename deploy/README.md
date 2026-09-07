@@ -21,10 +21,12 @@ git pull
 bash deploy/server_bootstrap.sh
 ```
 
-Check the output:
-- `podman graphRoot` and `crio root` should both be under `/var/lib/containers/storage`.
-  If they match, sideloading the image works. If not, see the bottom of this file.
-- node free disk should be comfortably > 100 GB.
+Notes for THIS node:
+- podman's default store is on the small root disk; CRI-O's store is
+  `/opt/showroom/data/containers-storage` on the 2.4 TB disk. `deploy/build.sh`
+  already builds into CRI-O's store, so the image lands on the big disk and
+  Kubernetes can see it.
+- `local-path` PVCs are stored under `/opt/showroom/data/local-path` (big disk).
 
 ```bash
 # 1. confirm a pod actually gets a GPU (and see which model / VRAM)
