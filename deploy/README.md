@@ -105,6 +105,13 @@ image. Confirm `sudo crictl images | grep cosmos`. See next section.
 `--offload-diffusion-model --offload-text-encoder --offload-tokenizer`, or use a
 smaller `MODEL`, or lower `--num-output-frames` / `--resolution`.
 
+**Build fails: `flash-attn ... only has wheels with ... cp310`** — the repo pins
+Python 3.13, which only works with the CUDA 13 dep set. We pin it back to 3.10
+(`.python-version` and `packages/cosmos-oss/.python-version`) so the CUDA 12.8
+set (`--extra=cu128`, torch 2.7) resolves. If you'd rather use CUDA 13:
+set both files back to `3.13` and build with `--build-arg CUDA_NAME=cu130`
+(the node's driver 580.x supports CUDA 13).
+
 **`401` / gated repo from Hugging Face** — accept the licenses while logged in:
 <https://huggingface.co/nvidia/Cosmos-Guardrail1> and
 <https://huggingface.co/nvidia/Cosmos-Predict2.5-2B>, and check the `hf-token` secret.
