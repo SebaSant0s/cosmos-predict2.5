@@ -1,4 +1,4 @@
-# Quick sanity check: does a pod get a GPU, and which one?
+# Quick sanity check: does a pod get both GPUs, and which ones? (expect 2 x L40S, 48 GB)
 #   kubectl apply -f deploy/k8s/00-gpu-check.yaml
 #   kubectl logs -f gpu-check
 #   kubectl delete -f deploy/k8s/00-gpu-check.yaml
@@ -14,4 +14,4 @@ spec:
       command: ["nvidia-smi"]
       resources:
         limits:
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2

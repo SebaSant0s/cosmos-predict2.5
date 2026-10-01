@@ -46,12 +46,15 @@ spec:
               value: assets/base/shovel_example.json
             - name: MODEL
               value: 2B/post-trained
+            # Must match the nvidia.com/gpu limit below (node has 2 x L40S 48 GB).
+            - name: NUM_GPUS
+              value: "2"
           resources:
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
             requests:
-              cpu: "4"
-              memory: 32Gi
+              cpu: "16"
+              memory: 64Gi
           volumeMounts:
             - name: data
               mountPath: /data
@@ -64,4 +67,5 @@ spec:
         - name: dshm
           emptyDir:
             medium: Memory
-            sizeLimit: 16Gi
+            # torchrun workers share tensors through /dev/shm; counts against node RAM (128 GB).
+            sizeLimit: 32Gi

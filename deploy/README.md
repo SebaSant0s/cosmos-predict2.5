@@ -1,7 +1,8 @@
 # Deploying Cosmos-Predict2.5 on the Kubernetes GPU node
 
-The target server is a **single-node Kubernetes cluster** (kubeadm + CRI-O, RHEL 9,
-NVIDIA GPU Operator, 8 GPUs). There is **no Docker** and the host shell has **no
+The target server is a **single-node Kubernetes cluster** (CRI-O, NVIDIA GPU
+Operator) with **2 × NVIDIA L40S (48 GB each)**, 2 × Xeon Platinum 8592+
+(128 cores) and 128 GB RAM. There is **no Docker** and the host shell has **no
 direct GPU access** — GPUs are only available inside pods. So:
 
 - build the image on the node with **podman**
@@ -21,17 +22,18 @@ git pull
 bash deploy/server_bootstrap.sh
 ```
 
-Notes for THIS node:
-- podman's default store is on the small root disk; CRI-O's store is
-  `/opt/showroom/data/containers-storage` on the 2.4 TB disk. `deploy/build.sh`
-  already builds into CRI-O's store, so the image lands on the big disk and
-  Kubernetes can see it.
-- `local-path` PVCs are stored under `/opt/showroom/data/local-path` (big disk).
+Check in the bootstrap output:
+- **GPU column shows `2`** and the model is L40S.
+- **A `local-path` storage class exists** — `deploy/k8s/10-pvc.yaml` uses it. If the
+  node has a different one, change `storageClassName` there.
+- **CRI-O's root is on a disk with room** — the image is ~30 GB and checkpoints
+  ~100 GB+. `deploy/build.sh` auto-detects CRI-O's root and builds straight into
+  it so Kubernetes can see the image (override with `CRIO_ROOT=/path`).
 
 ```bash
-# 1. confirm a pod actually gets a GPU (and see which model / VRAM)
+# 1. confirm a pod actually gets both GPUs (and see which model / VRAM)
 kubectl apply -f deploy/k8s/00-gpu-check.yaml
-kubectl logs -f gpu-check          # expect an nvidia-smi table (L4, 24 GB, etc.)
+kubectl logs -f gpu-check          # expect 2 x L40S, 46-48 GB each
 kubectl delete -f deploy/k8s/00-gpu-check.yaml
 
 # 2. Hugging Face token as a secret (NOT committed to git)
@@ -67,12 +69,12 @@ kubectl cp "$(kubectl get pod -l app=cosmos-infer -o jsonpath='{.items[0].metada
 then from Windows PowerShell:
 
 ```powershell
-scp -r user1@10.52.52.7:~/cosmos-predict2.5/outputs ./outputs
+scp -r <user>@<server-ip>:~/cosmos-predict2.5/outputs ./outputs
 ```
 
 ### Change what gets generated
 
-Edit the `env` block in `deploy/k8s/20-job.yaml` (`INPUT`, `MODEL`), or edit
+Edit the `env` block in `deploy/k8s/20-job.yaml` (`INPUT`, `MODEL`, `NUM_GPUS`), or edit
 `deploy/run_infer.sh`. Then:
 
 ```bash
@@ -87,6 +89,12 @@ because `deploy/` is baked into the image on each build.
 
 Available `MODEL` values: `2B/post-trained` (default), `2B/pre-trained`,
 `2B/distilled` (text2world only), `14B/post-trained`, `14B/pre-trained`.
+With 48 GB per GPU, the 14B models are realistic on this node.
+
+**GPUs per run:** the Job takes both GPUs (`NUM_GPUS: "2"` and
+`nvidia.com/gpu: 2`) and splits one generation across them with `torchrun`.
+Keep those two values equal. To run two jobs side by side instead, set both to 1
+and give the second Job a different `metadata.name`.
 
 `INPUT` options live in `assets/base/*.json` (image2world, video2world) — each
 points at an image/video + prompt in the same folder.
@@ -96,7 +104,8 @@ points at an image/video + prompt in the same folder.
 ## Troubleshooting
 
 **Job pod stuck `Pending`** — `kubectl describe pod -l app=cosmos-infer`. Usually
-no free GPU (`kubectl get pods -A` to find what's holding them) or PVC not bound.
+not enough free GPUs — the Job asks for both, so leftover `gpu-check` or old
+`cosmos-infer` pods will block it (`kubectl get pods -A` to find them) — or PVC not bound.
 
 **`ErrImageNeverPull` / `ImagePullBackOff`** — CRI-O can't see the podman-built
 image. Confirm `sudo crictl images | grep cosmos`. See next section.
@@ -110,7 +119,7 @@ Python 3.13, which only works with the CUDA 13 dep set. We pin it back to 3.10
 (`.python-version` and `packages/cosmos-oss/.python-version`) so the CUDA 12.8
 set (`--extra=cu128`, torch 2.7) resolves. If you'd rather use CUDA 13:
 set both files back to `3.13` and build with `--build-arg CUDA_NAME=cu130`
-(the node's driver 580.x supports CUDA 13).
+(needs NVIDIA driver 580+ on the node — check with the gpu-check pod).
 
 **`401` / gated repo from Hugging Face** — accept the licenses while logged in:
 <https://huggingface.co/nvidia/Cosmos-Guardrail1> and
