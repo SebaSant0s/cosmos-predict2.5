@@ -58,7 +58,21 @@ bash deploy/build.sh
 
 ---
 
+## GPU time window: 19:00–03:00 Chile time
+
+GPUs on this node are shared, so Cosmos only uses them **19:00–03:00
+`America/Santiago`** (Chile's daylight-saving changes are handled automatically):
+
+- `deploy/run_infer.sh` **refuses to start** outside the window and **stops the run
+  at 03:00**. A manual `kubectl apply` during the day just fails with a message.
+- Both Jobs also have `activeDeadlineSeconds: 32400` (9 h — the DST night is 9 h long) as a backstop.
+- Outside the window no Cosmos pod is running, so the GPU, CPU and RAM are free.
+  Disk is **not** freed: the image and checkpoints stay so the next night starts fast.
+- Bypass only for a test agreed with the team: add `ENFORCE_WINDOW=0` to the Job's `env`.
+
 ## Run inference
+
+### Manual run (inside the window)
 
 ```bash
 kubectl apply -f deploy/k8s/20-job.yaml
@@ -66,14 +80,33 @@ kubectl get pods -w                     # wait for cosmos-infer-xxxxx to be Runn
 kubectl logs -f job/cosmos-infer
 ```
 
+### Automatic nightly run
+
+```bash
+kubectl version                          # Server Version must be >= 1.27 (CronJob timeZone)
+kubectl apply -f deploy/k8s/30-cronjob.yaml
+kubectl get cronjob cosmos-infer-nightly # LAST SCHEDULE fills in after 19:00
+kubectl get jobs                         # nightly runs: cosmos-infer-nightly-xxxxx
+kubectl logs -f job/cosmos-infer-nightly-xxxxx
+```
+
+Pause it without deleting: `kubectl patch cronjob cosmos-infer-nightly -p '{"spec":{"suspend":true}}'`
+(`false` to resume). Each night overwrites `/data/outputs/<name>/`, so copy out
+results you want to keep.
+
 First run downloads model checkpoints to the PVC (`/data/hf`) — several minutes.
 Output is written to `/data/outputs/<name>/` on the PVC.
 
 ### Get the results onto Windows
 
+`kubectl cp` only works on a running container, and finished inference pods
+aren't, so use the small fetch pod (no GPU, fine at any hour):
+
 ```bash
-# on the node: copy from the PVC out via a short-lived pod, or from the finished pod:
-kubectl cp "$(kubectl get pod -l app=cosmos-infer -o jsonpath='{.items[0].metadata.name}')":/data/outputs ./outputs
+kubectl apply -f deploy/k8s/40-fetch.yaml
+kubectl wait --for=condition=Ready pod/cosmos-fetch
+kubectl cp cosmos-fetch:/data/outputs ./outputs
+kubectl delete -f deploy/k8s/40-fetch.yaml
 ```
 
 then from Windows PowerShell:
@@ -84,18 +117,18 @@ scp -r <user>@<server-ip>:~/cosmos-predict2.5/outputs ./outputs
 
 ### Change what gets generated
 
-Edit the `env` block in `deploy/k8s/20-job.yaml` (`INPUT`, `MODEL`, `NUM_GPUS`), or edit
-`deploy/run_infer.sh`. Then:
+Edit the `env` block (`INPUT`, `MODEL`, `NUM_GPUS`) in `deploy/k8s/20-job.yaml`
+— and in `deploy/k8s/30-cronjob.yaml` for the nightly run. Then:
 
 ```bash
 git pull
 kubectl delete job cosmos-infer
-kubectl apply -f deploy/k8s/20-job.yaml
+kubectl apply -f deploy/k8s/20-job.yaml          # or re-apply 30-cronjob.yaml
 ```
 
-You only need to re-run `deploy/build.sh` when the `Dockerfile` or Python
-dependencies (`pyproject.toml` / `uv.lock`) change — not for config edits,
-because `deploy/` is baked into the image on each build.
+YAML edits need no rebuild. Re-run `deploy/build.sh` when anything **inside the
+image** changes: `deploy/run_infer.sh`, `assets/`, the `Dockerfile`, or Python
+dependencies (`pyproject.toml` / `uv.lock`) — the repo is copied into the image at build time.
 
 Available `MODEL` values: `2B/post-trained` (default), `2B/pre-trained`,
 `2B/distilled` (text2world only), `14B/post-trained`, `14B/pre-trained`.
@@ -114,6 +147,15 @@ points at an image/video + prompt in the same folder.
 ---
 
 ## Troubleshooting
+
+**`outside the GPU window`** — expected before 19:00 / after 03:00 Chile time.
+Delete the failed Job and apply again inside the window.
+
+**`time zone data ... not found`** — the image was built before `tzdata` was added
+to the `Dockerfile`; re-run `bash deploy/build.sh`.
+
+**CronJob rejected: `unknown field "spec.timeZone"`** — Kubernetes is older than
+1.25/1.27. Remove `timeZone:` and write the schedule in the node's own time zone.
 
 **Job pod stuck `Pending`** — `kubectl describe pod -l app=cosmos-infer`. Usually
 no free GPU slice (`kubectl get pods -A` to find what's holding them) or PVC not bound.

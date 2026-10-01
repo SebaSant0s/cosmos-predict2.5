@@ -33,6 +33,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
         git \
         git-lfs \
         tree \
+        tzdata \
         wget
 
 # Install uv: https://docs.astral.sh/uv/getting-started/installation/

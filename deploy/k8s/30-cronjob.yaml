@@ -1,0 +1,78 @@
+# Nightly Cosmos-Predict2.5 run inside the GPU window (19:00-03:00 Chile time).
+# Starts at 19:00 America/Santiago (follows Chile's DST) and is killed at 03:00 at
+# the latest, freeing the GPU. Needs Kubernetes >= 1.27 for `timeZone`.
+#
+#   kubectl apply -f deploy/k8s/30-cronjob.yaml
+#   kubectl get cronjob cosmos-infer-nightly
+#   kubectl logs -f job/<cosmos-infer-nightly-xxxxx>     # name from `kubectl get jobs`
+#
+# Pause / resume the nightly run without deleting it:
+#   kubectl patch cronjob cosmos-infer-nightly -p '{"spec":{"suspend":true}}'
+#   kubectl patch cronjob cosmos-infer-nightly -p '{"spec":{"suspend":false}}'
+#
+# Pod spec mirrors 20-job.yaml - keep them in sync.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cosmos-infer-nightly
+spec:
+  schedule: "0 19 * * *"
+  timeZone: America/Santiago
+  # Never stack runs; if the cluster missed 19:00 by more than an hour, skip the night.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Backstop only - run_infer.sh stops at 03:00 itself. 9 h, not 8, because the
+      # night Chile's clocks go back, 19:00 -> 03:00 lasts 9 real hours.
+      activeDeadlineSeconds: 32400
+      template:
+        metadata:
+          labels:
+            app: cosmos-infer
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cosmos
+              image: localhost/cosmos-predict2.5:local
+              imagePullPolicy: IfNotPresent
+              workingDir: /workspace
+              args: ["bash", "deploy/run_infer.sh"]
+              env:
+                - name: HF_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: hf-token
+                      key: HF_TOKEN
+                - name: HF_HOME
+                  value: /data/hf
+                - name: OUTPUT_DIR
+                  value: /data/outputs
+                - name: INPUT
+                  value: assets/base/shovel_example.json
+                - name: MODEL
+                  value: 2B/post-trained
+                - name: NUM_GPUS
+                  value: "1"
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+                requests:
+                  cpu: "16"
+                  memory: 64Gi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: dshm
+                  mountPath: /dev/shm
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: cosmos-data
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 32Gi

@@ -11,12 +11,18 @@
 #
 # Re-run after changing something:
 #   kubectl delete job cosmos-infer ; kubectl apply -f deploy/k8s/20-job.yaml
+#
+# Only runs 19:00-03:00 Chile time: run_infer.sh refuses to start outside that
+# window and stops the run at 03:00. For the automatic nightly run see 30-cronjob.yaml.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: cosmos-infer
 spec:
   backoffLimit: 0
+  # Backstop only - run_infer.sh stops at 03:00 itself. 9 h, not 8, because the
+  # night Chile's clocks go back, 19:00 -> 03:00 lasts 9 real hours.
+  activeDeadlineSeconds: 32400
   completions: 1
   parallelism: 1
   template:
