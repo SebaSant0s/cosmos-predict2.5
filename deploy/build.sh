@@ -18,11 +18,15 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exec sudo -E bash "$0" "$@"
 fi
 
-CRIO_ROOT="${CRIO_ROOT:-$(crictl info 2>/dev/null | grep -o '"root": "[^"]*"' | head -1 | cut -d'"' -f4)}"
-if [[ -z "$CRIO_ROOT" ]]; then
-  echo "!! could not detect CRI-O's storage root; rerun with CRIO_ROOT=/path bash deploy/build.sh"
+# assets/ is stored in Git LFS and copied into the image as-is; without
+# `git lfs pull` the example inputs are tiny pointer files and inference fails.
+if head -c 40 assets/base/shovel_example.json | grep -q '^version https://git-lfs'; then
+  echo "!! assets/ are Git LFS pointers, not real files. Run first:"
+  echo "     sudo dnf install -y git-lfs && git lfs install && git lfs pull --include='assets/base/**'"
   exit 1
 fi
+
+CRIO_ROOT="${CRIO_ROOT:-$(bash "$(dirname "$0")/crio_root.sh")}"
 BIG_TMP="${BIG_TMP:-$(dirname "$CRIO_ROOT")/tmp}"
 
 mkdir -p "$BIG_TMP"

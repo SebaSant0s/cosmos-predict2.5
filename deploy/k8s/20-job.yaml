@@ -46,12 +46,14 @@ spec:
               value: assets/base/shovel_example.json
             - name: MODEL
               value: 2B/post-trained
-            # Must match the nvidia.com/gpu limit below (node has 2 x L40S 48 GB).
+            # Must match the nvidia.com/gpu limit below. The node time-slices its
+            # 2 x L40S into 8 shared "GPUs", so asking for 2 may land on the SAME card.
+            # Only raise both to 2 if gpu-check shows two different GPU UUIDs.
             - name: NUM_GPUS
-              value: "2"
+              value: "1"
           resources:
             limits:
-              nvidia.com/gpu: 2
+              nvidia.com/gpu: 1
             requests:
               cpu: "16"
               memory: 64Gi

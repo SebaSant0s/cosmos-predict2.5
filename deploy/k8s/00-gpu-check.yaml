@@ -1,4 +1,7 @@
 # Quick sanity check: does a pod get both GPUs, and which ones? (expect 2 x L40S, 48 GB)
+# The node time-slices GPUs (nvidia.com/gpu = 8 shared slices of 2 cards), so check
+# the `nvidia-smi -L` lines: two DIFFERENT UUIDs means 2 real cards; one means the same card twice.
+# Also look at "Memory-Usage": other pods may already be using VRAM on a shared card.
 #   kubectl apply -f deploy/k8s/00-gpu-check.yaml
 #   kubectl logs -f gpu-check
 #   kubectl delete -f deploy/k8s/00-gpu-check.yaml
@@ -11,7 +14,7 @@ spec:
   containers:
     - name: gpu-check
       image: docker.io/nvidia/cuda:12.8.1-base-ubuntu24.04
-      command: ["nvidia-smi"]
+      command: ["sh", "-c", "nvidia-smi -L; nvidia-smi"]
       resources:
         limits:
           nvidia.com/gpu: 2

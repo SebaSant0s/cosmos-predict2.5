@@ -18,12 +18,22 @@ Local dev stays on Windows: edit → `git commit` → `git push`. On the node: `
 cd ~/cosmos-predict2.5
 git pull
 
+# Example inputs under assets/ are stored in Git LFS — pull the real files
+# (the image copies the checkout as-is; build.sh refuses to run without them)
+sudo dnf install -y git-lfs
+git lfs install
+git lfs pull --include='assets/base/**'
+
 # 0. inspect the environment
 bash deploy/server_bootstrap.sh
 ```
 
 Check in the bootstrap output:
-- **GPU column shows `2`** and the model is L40S.
+- **Git LFS assets: `ok`**.
+- **GPU column** — this node shows `8`, model `NVIDIA-L40S-SHARED`: the GPU
+  Operator time-slices the 2 physical cards into 8 shared slices. A slice gives
+  a pod a whole 48 GB card, but VRAM is **not** partitioned — other pods on the
+  same card share it.
 - **A `local-path` storage class exists** — `deploy/k8s/10-pvc.yaml` uses it. If the
   node has a different one, change `storageClassName` there.
 - **CRI-O's root is on a disk with room** — the image is ~30 GB and checkpoints
@@ -33,7 +43,7 @@ Check in the bootstrap output:
 ```bash
 # 1. confirm a pod actually gets both GPUs (and see which model / VRAM)
 kubectl apply -f deploy/k8s/00-gpu-check.yaml
-kubectl logs -f gpu-check          # expect 2 x L40S, 46-48 GB each
+kubectl logs -f gpu-check          # 2 different UUIDs in `nvidia-smi -L` = 2 real cards; check Memory-Usage too
 kubectl delete -f deploy/k8s/00-gpu-check.yaml
 
 # 2. Hugging Face token as a secret (NOT committed to git)
@@ -91,10 +101,12 @@ Available `MODEL` values: `2B/post-trained` (default), `2B/pre-trained`,
 `2B/distilled` (text2world only), `14B/post-trained`, `14B/pre-trained`.
 With 48 GB per GPU, the 14B models are realistic on this node.
 
-**GPUs per run:** the Job takes both GPUs (`NUM_GPUS: "2"` and
-`nvidia.com/gpu: 2`) and splits one generation across them with `torchrun`.
-Keep those two values equal. To run two jobs side by side instead, set both to 1
-and give the second Job a different `metadata.name`.
+**GPUs per run:** the Job uses one GPU slice (`NUM_GPUS: "1"` and
+`nvidia.com/gpu: 1`) — a full 48 GB L40S, plenty for 2B. Because the node
+time-slices, asking for 2 may hand the pod the *same* card twice, and `torchrun`
+would then compete with itself. Only raise both values to 2 (keep them equal) if
+`gpu-check` showed two different UUIDs; `torchrun` then splits one generation
+across both cards.
 
 `INPUT` options live in `assets/base/*.json` (image2world, video2world) — each
 points at an image/video + prompt in the same folder.
@@ -104,8 +116,14 @@ points at an image/video + prompt in the same folder.
 ## Troubleshooting
 
 **Job pod stuck `Pending`** — `kubectl describe pod -l app=cosmos-infer`. Usually
-not enough free GPUs — the Job asks for both, so leftover `gpu-check` or old
-`cosmos-infer` pods will block it (`kubectl get pods -A` to find them) — or PVC not bound.
+no free GPU slice (`kubectl get pods -A` to find what's holding them) or PVC not bound.
+
+**`version https://git-lfs...` / JSON decode error on the input** — the assets
+were LFS pointers when the image was built. Run the `git lfs pull` step, then
+`bash deploy/build.sh` again.
+
+**CUDA out of memory on a card that should be empty** — the GPUs are shared;
+another pod is using VRAM on the same card. Check `nvidia-smi` in the gpu-check pod.
 
 **`ErrImageNeverPull` / `ImagePullBackOff`** — CRI-O can't see the podman-built
 image. Confirm `sudo crictl images | grep cosmos`. See next section.
