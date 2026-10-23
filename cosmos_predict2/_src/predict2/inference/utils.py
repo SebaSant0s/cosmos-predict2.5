@@ -110,8 +110,8 @@ def read_and_process_image(img_path: str, resolution: tuple[int, int], num_video
     if ext not in _IMAGE_EXTENSIONS:
         raise ValueError(f"Invalid image extension: {ext}")
 
-    # Read the image
-    img = Image.open(img_path)
+    # Read the image (convert drops alpha/palette so the VAE always gets 3 channels)
+    img = Image.open(img_path).convert("RGB")
 
     # Convert to tensor
     img = F.to_tensor(img)

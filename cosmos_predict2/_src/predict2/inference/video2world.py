@@ -135,8 +135,8 @@ def read_and_process_image(img_path: str, resolution: list[int], num_video_frame
     if ext not in _IMAGE_EXTENSIONS:
         raise ValueError(f"Invalid image extension: {ext}")
 
-    # Read the image
-    img = Image.open(img_path)
+    # Read the image (convert drops alpha/palette so the VAE always gets 3 channels)
+    img = Image.open(img_path).convert("RGB")
 
     # Convert to tensor
     img = torchvision.transforms.functional.to_tensor(img)
@@ -737,7 +737,7 @@ class Video2WorldInference:
             if ext in _IMAGE_EXTENSIONS:
                 log.info(f"Processing image input for autoregressive: {input_path}")
                 # For image input, create full video with first frame as image, rest zeros
-                img = Image.open(input_path)
+                img = Image.open(input_path).convert("RGB")
                 img = torchvision.transforms.functional.to_tensor(img)
                 img = img.unsqueeze(0)  # Add temporal dimension T=1
                 img = (img * 255.0).to(torch.uint8)
