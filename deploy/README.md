@@ -58,14 +58,14 @@ bash deploy/build.sh
 
 ---
 
-## GPU time window: 19:00–03:00 Chile time
+## GPU time window: 16:00–03:00 Chile time
 
-GPUs on this node are shared, so Cosmos only uses them **19:00–03:00
+GPUs on this node are shared, so Cosmos only uses them **16:00–03:00
 `America/Santiago`** (Chile's daylight-saving changes are handled automatically):
 
 - `deploy/run_infer.sh` **refuses to start** outside the window and **stops the run
   at 03:00**. A manual `kubectl apply` during the day just fails with a message.
-- Both Jobs also have `activeDeadlineSeconds: 32400` (9 h — the DST night is 9 h long) as a backstop.
+- Both Jobs also have `activeDeadlineSeconds: 43200` (12 h — the DST night is 12 h long) as a backstop.
 - Outside the window no Cosmos pod is running, so the GPU, CPU and RAM are free.
   Disk is **not** freed: the image and checkpoints stay so the next night starts fast.
 - Bypass only for a test agreed with the team: add `ENFORCE_WINDOW=0` to the Job's `env`.
@@ -85,7 +85,7 @@ kubectl logs -f job/cosmos-infer
 ```bash
 kubectl version                          # Server Version must be >= 1.27 (CronJob timeZone)
 kubectl apply -f deploy/k8s/30-cronjob.yaml
-kubectl get cronjob cosmos-infer-nightly # LAST SCHEDULE fills in after 19:00
+kubectl get cronjob cosmos-infer-nightly # LAST SCHEDULE fills in after 16:00
 kubectl get jobs                         # nightly runs: cosmos-infer-nightly-xxxxx
 kubectl logs -f job/cosmos-infer-nightly-xxxxx
 ```
@@ -148,7 +148,7 @@ points at an image/video + prompt in the same folder.
 
 ## Troubleshooting
 
-**`outside the GPU window`** — expected before 19:00 / after 03:00 Chile time.
+**`outside the GPU window`** — expected before 16:00 / after 03:00 Chile time (start hour: `WINDOW_START` in `run_infer.sh`).
 Delete the failed Job and apply again inside the window.
 
 **`time zone data ... not found`** — the image was built before `tzdata` was added

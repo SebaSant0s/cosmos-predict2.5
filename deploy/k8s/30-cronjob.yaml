@@ -1,5 +1,5 @@
-# Nightly Cosmos-Predict2.5 run inside the GPU window (19:00-03:00 Chile time).
-# Starts at 19:00 America/Santiago (follows Chile's DST) and is killed at 03:00 at
+# Nightly Cosmos-Predict2.5 run inside the GPU window (16:00-03:00 Chile time).
+# Starts at 16:00 America/Santiago (follows Chile's DST) and is killed at 03:00 at
 # the latest, freeing the GPU. Needs Kubernetes >= 1.27 for `timeZone`.
 #
 #   kubectl apply -f deploy/k8s/30-cronjob.yaml
@@ -16,9 +16,9 @@ kind: CronJob
 metadata:
   name: cosmos-infer-nightly
 spec:
-  schedule: "0 19 * * *"
+  schedule: "0 16 * * *"
   timeZone: America/Santiago
-  # Never stack runs; if the cluster missed 19:00 by more than an hour, skip the night.
+  # Never stack runs; if the cluster missed 16:00 by more than an hour, skip the night.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3
@@ -26,9 +26,9 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      # Backstop only - run_infer.sh stops at 03:00 itself. 9 h, not 8, because the
-      # night Chile's clocks go back, 19:00 -> 03:00 lasts 9 real hours.
-      activeDeadlineSeconds: 32400
+      # Backstop only - run_infer.sh stops at 03:00 itself. 12 h, not 11, because the
+      # night Chile's clocks go back, 16:00 -> 03:00 lasts 12 real hours.
+      activeDeadlineSeconds: 43200
       template:
         metadata:
           labels:
