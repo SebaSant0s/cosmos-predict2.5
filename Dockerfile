@@ -62,7 +62,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the code into the container if in standalone mode. Otherwise, just install the dependencies at runtime.
 # We mount the source code to /tmp and copy it to /workspace if in standalone mode.
 ARG STANDALONE
+# Podman/buildah don't hash bind-mounted files into the cache key, so a changed
+# checkout would reuse the stale copy below. Pass a per-commit value to bust it.
+ARG SOURCE_REV=unset
 RUN --mount=type=bind,source=.,target=/tmp/workspace \
+   echo "source rev: ${SOURCE_REV}" && \
    if [ "$STANDALONE" = "true" ] ; then cp -r /tmp/workspace/* /workspace && just install && rm -rf /workspace/.git ; else echo "Run just install to install all the dependencies at runtime" ; fi
 
 # Place executables in the environment at the front of the path

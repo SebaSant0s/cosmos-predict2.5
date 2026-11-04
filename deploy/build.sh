@@ -32,13 +32,18 @@ BIG_TMP="${BIG_TMP:-$(dirname "$CRIO_ROOT")/tmp}"
 mkdir -p "$BIG_TMP"
 export TMPDIR="$BIG_TMP"
 
-echo ">> building $IMAGE into CRI-O's store ($CRIO_ROOT)"
-echo ">> this is long: pulls the CUDA base image + PyTorch, ~20-40 min"
+# Changes on every build so the code-copy step never reuses a stale checkout
+# (podman ignores bind-mounted file changes when matching its cache).
+SOURCE_REV="$(git -c safe.directory='*' rev-parse --short HEAD 2>/dev/null || echo nogit)-$(date +%s)"
+
+echo ">> building $IMAGE into CRI-O's store ($CRIO_ROOT), source $SOURCE_REV"
+echo ">> first build is long (CUDA base image + PyTorch, ~20-40 min); rebuilds take a few minutes"
 
 podman --root="$CRIO_ROOT" --runroot=/run/containers/storage \
   build \
   -f Dockerfile \
   --build-arg STANDALONE=true \
+  --build-arg SOURCE_REV="$SOURCE_REV" \
   -t "$IMAGE" \
   .
 
