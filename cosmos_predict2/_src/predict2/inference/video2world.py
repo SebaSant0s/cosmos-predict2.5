@@ -871,8 +871,10 @@ class Video2WorldInference:
                 num_steps=num_steps,
             )  # Returns (1, C, T, H, W)
 
-            # Extract only the actual generated frames (remove padding)
-            chunk_video = chunk_video[:, :, :actual_chunk_size, :, :]
+            # Extract only the actual generated frames (remove padding). Keep finished chunks in
+            # host RAM: holding every decoded chunk on the GPU runs long videos out of VRAM.
+            chunk_video = chunk_video[:, :, :actual_chunk_size, :, :].cpu()
+            torch.cuda.empty_cache()
 
             # Store generated chunk
             if chunk_idx == 0:

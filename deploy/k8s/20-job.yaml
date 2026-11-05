@@ -46,6 +46,9 @@ spec:
                   key: HF_TOKEN
             - name: HF_HOME
               value: /data/hf
+            # Reduces VRAM fragmentation on long (autoregressive) runs.
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
             - name: OUTPUT_DIR
               value: /data/outputs
             - name: INPUT
